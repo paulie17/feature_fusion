@@ -139,11 +139,11 @@ class Bottleneck(nn.Module):
         return out
 
 
-class ResNetFeatures(nn.Module):
+class ResNetFeaturesFusion(nn.Module):
     def __init__(self, block, layers, num_parallel, bn_threshold=2e-2):
         self.inplanes = 64
         self.num_parallel = num_parallel
-        super(ResNetFeatures, self).__init__()
+        super(ResNetFeaturesFusion, self).__init__()
         self.dropout = ModuleParallel(nn.Dropout(p=0.5))
         self.conv1 = ModuleParallel(nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,  bias=False))
         self.bn1 = BatchNorm2dParallel(64, num_parallel)
@@ -153,6 +153,7 @@ class ResNetFeatures(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], bn_threshold, stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], bn_threshold, stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], bn_threshold, stride=2)
+        self.fusion_layer = torch.nn.Conv2d(2048*num_parallel, 2048, kernel_size=3, padding=1)
 
     def _make_layer(self, block, planes, num_blocks, bn_threshold, stride=1):
         downsample = None
@@ -184,10 +185,19 @@ class ResNetFeatures(nn.Module):
         l4 = self.dropout(l4)
         l3 = self.dropout(l3)
 
-        return l1, l2, l3, l4
+        if self.num_parallel == 2:
+            concat_features = torch.cat((l4[0], l4[1]), dim=1)
+        elif self.num_parallel > 2:
+            concat_features = torch.cat((l4[0], l4[1]), dim=1)
+            for i in range(self.num_parallel-2):
+                concat_features = torch.cat((concat_features, l4[2+1]), dim=1)
+
+        fused_features = self.fusion_layer(concat_features)
+
+        return fused_features
 
 
-def resnet_feature_extraction(num_layers, num_parallel, bn_threshold):
+def resnet_features_fusion(num_layers, num_parallel, bn_threshold):
     if int(num_layers) == 50:
         layers = [3, 4, 6, 3]
     elif int(num_layers) == 101:
@@ -197,7 +207,7 @@ def resnet_feature_extraction(num_layers, num_parallel, bn_threshold):
     else:
         print('invalid num_layers')
 
-    model = ResNetFeatures(Bottleneck, layers, num_parallel, bn_threshold)
+    model = ResNetFeaturesFusion(Bottleneck, layers, num_parallel, bn_threshold)
     return model
 
 
