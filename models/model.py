@@ -190,7 +190,7 @@ class ResNetFeaturesFusion(nn.Module):
         elif self.num_parallel > 2:
             concat_features = torch.cat((l4[0], l4[1]), dim=1)
             for i in range(self.num_parallel-2):
-                concat_features = torch.cat((concat_features, l4[2+1]), dim=1)
+                concat_features = torch.cat((concat_features, l4[2+i]), dim=1)
 
         fused_features = self.fusion_layer(concat_features)
 
