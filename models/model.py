@@ -140,7 +140,7 @@ class Bottleneck(nn.Module):
 
 
 class ResNetFeaturesFusion(nn.Module):
-    def __init__(self, block, layers, num_parallel, bn_threshold=2e-2):
+    def __init__(self, block, layers, num_parallel, bn_threshold=2e-2, last_layer='layer3'):
         self.inplanes = 64
         self.num_parallel = num_parallel
         super(ResNetFeaturesFusion, self).__init__()
@@ -153,7 +153,13 @@ class ResNetFeaturesFusion(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], bn_threshold, stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], bn_threshold, stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], bn_threshold, stride=2)
-        self.fusion_layer = torch.nn.Conv2d(2048*num_parallel, 2048, kernel_size=3, padding=1)
+
+        self.last_layer = last_layer
+
+        if last_layer == 'layer3':
+            self.fusion_layer = torch.nn.Conv2d(1024*num_parallel, 1024, kernel_size=3, padding=1)
+        elif last_layer == 'layer4':
+            self.fusion_layer = torch.nn.Conv2d(2048*num_parallel, 2048, kernel_size=3, padding=1)
 
     def _make_layer(self, block, planes, num_blocks, bn_threshold, stride=1):
         downsample = None
@@ -184,13 +190,23 @@ class ResNetFeaturesFusion(nn.Module):
 
         l4 = self.dropout(l4)
         l3 = self.dropout(l3)
-
-        if self.num_parallel == 2:
-            concat_features = torch.cat((l4[0], l4[1]), dim=1)
-        elif self.num_parallel > 2:
-            concat_features = torch.cat((l4[0], l4[1]), dim=1)
-            for i in range(self.num_parallel-2):
-                concat_features = torch.cat((concat_features, l4[2+i]), dim=1)
+        
+        print(l3[0].shape)
+        
+        if self.last_layer == 'layer3':
+            if self.num_parallel == 2:
+                concat_features = torch.cat((l3[0], l3[1]), dim=1)
+            elif self.num_parallel > 2:
+                concat_features = torch.cat((l3[0], l3[1]), dim=1)
+                for i in range(self.num_parallel-2):
+                    concat_features = torch.cat((concat_features, l3[2+i]), dim=1)
+        elif self.last_layer == 'layer4':
+            if self.num_parallel == 2:
+                concat_features = torch.cat((l4[0], l4[1]), dim=1)
+            elif self.num_parallel > 2:
+                concat_features = torch.cat((l4[0], l4[1]), dim=1)
+                for i in range(self.num_parallel-2):
+                    concat_features = torch.cat((concat_features, l4[2+i]), dim=1)
 
         fused_features = self.fusion_layer(concat_features)
 
