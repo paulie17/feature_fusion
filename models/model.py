@@ -33,7 +33,7 @@ import torch.nn.functional as F
 import torch
 import numpy as np
 
-from utils.helpers import maybe_download
+from ..utils.helpers import maybe_download
 from .modules import *
 
 models_urls = {
@@ -190,9 +190,7 @@ class ResNetFeaturesFusion(nn.Module):
 
         l4 = self.dropout(l4)
         l3 = self.dropout(l3)
-        
-        print(l3[0].shape)
-        
+                
         if self.last_layer == 'layer3':
             if self.num_parallel == 2:
                 concat_features = torch.cat((l3[0], l3[1]), dim=1)
